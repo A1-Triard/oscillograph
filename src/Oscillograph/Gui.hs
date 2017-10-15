@@ -24,38 +24,36 @@ import Paths_oscillograph_core
 fps :: Double
 fps = 50.0
 
-delay :: Double
-delay = 10.0
+dtK :: Double
+dtK = 0.02
 
-pointsMaxCount :: Int
-pointsMaxCount = round (fps * delay)
+delayK :: Double
+delayK = 10.0
 
-data Plot = Plot !Int ![(Double, Double)]
+data Plot = Plot !Double !Int ![(Double, Double)]
 
 emptyPlot :: Plot
-emptyPlot = Plot 0 []
+emptyPlot = Plot 0.0 0 []
 
-addPoint :: (Double, Double) -> Plot -> Plot
-addPoint point (Plot points_count points) =
+addPoint :: Int -> Double -> (Double -> (Double, Double)) -> Plot -> Plot
+addPoint max_points_count time_delta point (Plot time points_count points) =
   let increased_points_count = points_count + 1 in
-  let drop_count = max 0 (increased_points_count - pointsMaxCount) in
-  Plot (increased_points_count - drop_count) $ drop drop_count $ points `snoc` point
+  let drop_count = max 0 (increased_points_count - max_points_count) in
+  let new_time = time + time_delta in
+  Plot new_time (increased_points_count - drop_count) $ drop drop_count $ points `snoc` point new_time
 
-drawPlot :: DrawingArea -> Plot -> Render ()
-drawPlot canvas (Plot _ points) = do
-  case uncons points of
-    Nothing -> return ()
-    Just ((begin_x, begin_y), steps) -> do
-      Rectangle _ _ w h <- liftIO $ widgetGetAllocation canvas
-      let x0 = fromIntegral w / 2.0
-      let y0 = fromIntegral h / 2.0
-      let amplitude = fromIntegral (min w h) / 2.0
-      setLineWidth 1.0
-      setSourceRGB 0.3 0.6 0.6
-      moveTo (x0 + amplitude * begin_x) (y0 - amplitude * begin_y)
-      forM_ steps $ \(x, y) -> do
-        lineTo (x0 + amplitude * x) (y0 - amplitude * y)
-      stroke
+drawPlot :: Int -> DrawingArea -> Plot -> Render ()
+drawPlot max_points_count canvas (Plot _ points_count points) = do
+  Rectangle _ _ w h <- liftIO $ widgetGetAllocation canvas
+  let x0 = fromIntegral w / 2.0
+  let y0 = fromIntegral h / 2.0
+  let amplitude = fromIntegral (min w h) / 2.0
+  setLineWidth 1.0
+  forM_ (zip (iterate (+ 1) (max_points_count `quot` 2 - points_count)) (zip points (drop 1 points))) $ \(n, ((x1, y1), (x2, y2))) -> do
+    setSourceRGBA 0.3 0.6 0.6 $ if n >= 0 then 1.0 else 1.0 + 2.0 * fromIntegral n / fromIntegral max_points_count
+    moveTo (x0 + amplitude * x1) (y0 - amplitude * y1)
+    lineTo (x0 + amplitude * x2) (y0 - amplitude * y2)
+    stroke
 
 data UI = UI
   { uiCanvas :: !DrawingArea
@@ -69,26 +67,30 @@ data UI = UI
   , uiFrequencyY :: !Adjustment
   , uiPhaseX :: !Adjustment
   , uiPhaseY :: !Adjustment
+  , uiDelay :: !Adjustment
   }
 
 frame :: IO Double -> UI -> Plot -> Maybe (ConnectId DrawingArea) -> ConnectId Button -> Maybe (ConnectId Button) -> IO Bool
 frame timer ui plot draw_id play_click_id clear_click_id = do
-  t <- timer
+  t1 <- timer
   a_x <- K.get (uiAmplitudeX ui) adjustmentValue
   a_y <- K.get (uiAmplitudeY ui) adjustmentValue
   w_x <- K.get (uiFrequencyX ui) adjustmentValue
   w_y <- K.get (uiFrequencyY ui) adjustmentValue
   f_x <- K.get (uiPhaseX ui) adjustmentValue
   f_y <- K.get (uiPhaseY ui) adjustmentValue
-  let new_plot = addPoint (a_x * cos (w_x * t + f_x), a_y * cos (w_y * t + f_y)) plot
+  delay <- K.get (uiDelay ui) adjustmentValue
+  let dt = dtK / max w_x w_y
+  let max_points_count = round (delay / dt)
+  let new_plot = snd $ fromMaybe (error "frame") $ unsnoc $ takeWhile (\(Plot t _ _) -> t <= t1) $ iterate (addPoint max_points_count dt $ \t -> (a_x * cos (2.0 * pi * (w_x * t + f_x)), a_y * cos (2.0 * pi * (w_y * t + f_y)))) plot
   maybe (return ()) signalDisconnect draw_id
   maybe (return ()) signalDisconnect clear_click_id
-  void $ queueFrame timer ui new_plot play_click_id
+  void $ queueFrame max_points_count timer ui new_plot play_click_id
   return False
 
-queueFrame :: IO Double -> UI -> Plot -> ConnectId Button -> IO (ConnectId Button)
-queueFrame timer ui plot play_click_id = do
-  draw_id <- on (uiCanvas ui) draw $ drawPlot (uiCanvas ui) plot
+queueFrame :: Int -> IO Double -> UI -> Plot -> ConnectId Button -> IO (ConnectId Button)
+queueFrame max_points_count timer ui plot play_click_id = do
+  draw_id <- on (uiCanvas ui) draw $ drawPlot max_points_count (uiCanvas ui) plot
   widgetQueueDraw (uiCanvas ui)
   paused <- (Just (castToWidget $ uiPlay ui) ==) <$> K.get (uiPlayPause ui) stackVisibleChild
   if paused
@@ -131,10 +133,15 @@ playClick ui plot paused play_click_id clear_click_id = do
       maybe (return ()) signalDisconnect draw_id
       signalDisconnect play_click_id
       maybe (return ()) signalDisconnect clear_click_id
+      w_x <- K.get (uiFrequencyX ui) adjustmentValue
+      w_y <- K.get (uiFrequencyY ui) adjustmentValue
+      delay <- K.get (uiDelay ui) adjustmentValue
+      let dt = dtK / max w_x w_y
+      let max_points_count = round (delay / dt)
       void $ mfix $ \new_clear_click_id -> do
         new_play_click_id <- mfix $ \sid -> on (uiPlay ui) buttonActivated $ playClick ui plot Nothing sid (Just new_clear_click_id)
         current_seconds <- currentSeconds
-        queueFrame (((+ t0) . subtract current_seconds) <$> currentSeconds) ui plot new_play_click_id
+        queueFrame max_points_count (((+ t0) . subtract current_seconds) <$> currentSeconds) ui plot new_play_click_id
 
 pauseClick :: UI -> IO ()
 pauseClick ui = do
@@ -144,6 +151,26 @@ currentSeconds :: IO Double
 currentSeconds = do
   t <- getTime Monotonic
   return $ fromIntegral (sec t) + fromIntegral (nsec t) * 1e-9
+
+updateMaxDelay :: UI -> IO ()
+updateMaxDelay ui = do
+  w_x <- K.get (uiFrequencyX ui) adjustmentValue
+  w_y <- K.get (uiFrequencyY ui) adjustmentValue
+  delay <- K.get (uiDelay ui) adjustmentValue
+  min_delay <- K.get (uiDelay ui) adjustmentLower
+  let max_delay = delayK / max w_x w_y
+  K.set (uiDelay ui) [adjustmentUpper := max_delay, adjustmentLower := min min_delay max_delay, adjustmentValue := min delay max_delay]
+
+updateMaxFrequency :: UI -> IO ()
+updateMaxFrequency ui = do
+  min_delay <- K.get (uiDelay ui) adjustmentLower
+  let max_frequency = delayK / min_delay
+  frequency_x <- K.get (uiFrequencyX ui) adjustmentValue
+  frequency_y <- K.get (uiFrequencyX ui) adjustmentValue
+  min_frequency_x <- K.get (uiFrequencyX ui) adjustmentLower
+  min_frequency_y <- K.get (uiFrequencyX ui) adjustmentLower
+  K.set (uiFrequencyX ui) [adjustmentUpper := max_frequency, adjustmentLower := min min_frequency_x max_frequency, adjustmentValue := min frequency_x max_frequency]
+  K.set (uiFrequencyY ui) [adjustmentUpper := max_frequency, adjustmentLower := min min_frequency_y max_frequency, adjustmentValue := min frequency_y max_frequency]
 
 oscillograph :: IO ()
 oscillograph = do
@@ -162,8 +189,13 @@ oscillograph = do
   w_y <- builderGetObject b castToAdjustment ("frequencyY" :: S.Text)
   f_x <- builderGetObject b castToAdjustment ("phaseX" :: S.Text)
   f_y <- builderGetObject b castToAdjustment ("phaseY" :: S.Text)
+  delay <- builderGetObject b castToAdjustment ("delay" :: S.Text)
   clear <- builderGetObject b castToButton ("clear" :: S.Text)
-  let ui = UI canvas play_pause play pause clear a_x a_y w_x w_y f_x f_y
+  let ui = UI canvas play_pause play pause clear a_x a_y w_x w_y f_x f_y delay
+  updateMaxFrequency ui
+  updateMaxDelay ui
+  void $ onValueChanged w_x $ updateMaxDelay ui
+  void $ onValueChanged w_y $ updateMaxDelay ui
   void $ mfix $ \sid -> on play buttonActivated $ playClick ui emptyPlot (Just (0.0, Nothing)) sid Nothing
   void $ on pause buttonActivated $ pauseClick ui
   widgetShowAll window

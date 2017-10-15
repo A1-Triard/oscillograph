@@ -3,40 +3,47 @@
 <interface>
   <requires lib="gtk+" version="3.20"/>
   <object class="GtkAdjustment" id="amplitudeX">
-    <property name="upper">1000</property>
+    <property name="upper">1</property>
     <property name="value">0.80000000000000004</property>
-    <property name="step_increment">1</property>
-    <property name="page_increment">10</property>
+    <property name="step_increment">0.02</property>
+    <property name="page_increment">0.10000000000000001</property>
   </object>
   <object class="GtkAdjustment" id="amplitudeY">
-    <property name="upper">1000</property>
+    <property name="upper">1</property>
     <property name="value">0.80000000000000004</property>
-    <property name="step_increment">1</property>
-    <property name="page_increment">10</property>
+    <property name="step_increment">0.02</property>
+    <property name="page_increment">0.10000000000000001</property>
+  </object>
+  <object class="GtkAdjustment" id="delay">
+    <property name="lower">0.01</property>
+    <property name="upper">60</property>
+    <property name="value">0.10000000000000001</property>
+    <property name="step_increment">0.10000000000000001</property>
+    <property name="page_increment">1</property>
   </object>
   <object class="GtkAdjustment" id="frequencyX">
-    <property name="upper">1000</property>
-    <property name="value">10</property>
+    <property name="upper">5000</property>
+    <property name="value">500</property>
     <property name="step_increment">1</property>
     <property name="page_increment">10</property>
   </object>
   <object class="GtkAdjustment" id="frequencyY">
-    <property name="upper">1000</property>
-    <property name="value">10</property>
+    <property name="upper">5000</property>
+    <property name="value">300</property>
     <property name="step_increment">1</property>
     <property name="page_increment">10</property>
   </object>
   <object class="GtkAdjustment" id="phaseX">
-    <property name="lower">-1000</property>
-    <property name="upper">1000</property>
-    <property name="step_increment">1</property>
-    <property name="page_increment">10</property>
+    <property name="lower">-1</property>
+    <property name="upper">1</property>
+    <property name="step_increment">0.01</property>
+    <property name="page_increment">0.10000000000000001</property>
   </object>
   <object class="GtkAdjustment" id="phaseY">
-    <property name="lower">-1000</property>
-    <property name="upper">1000</property>
-    <property name="step_increment">1</property>
-    <property name="page_increment">10</property>
+    <property name="lower">-1</property>
+    <property name="upper">1</property>
+    <property name="step_increment">0.01</property>
+    <property name="page_increment">0.10000000000000001</property>
   </object>
   <object class="GtkApplicationWindow" id="applicationWindow">
     <property name="can_focus">False</property>
@@ -121,7 +128,7 @@
                     <property name="hexpand">True</property>
                     <property name="xalign">1</property>
                     <property name="adjustment">phaseX</property>
-                    <property name="digits">1</property>
+                    <property name="digits">2</property>
                   </object>
                   <packing>
                     <property name="left_attach">1</property>
@@ -135,7 +142,7 @@
                     <property name="hexpand">True</property>
                     <property name="xalign">1</property>
                     <property name="adjustment">phaseY</property>
-                    <property name="digits">1</property>
+                    <property name="digits">2</property>
                   </object>
                   <packing>
                     <property name="left_attach">1</property>
@@ -146,6 +153,7 @@
                   <object class="GtkLabel">
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
+                    <property name="halign">start</property>
                     <property name="label" translatable="yes">Ax</property>
                   </object>
                   <packing>
@@ -157,6 +165,7 @@
                   <object class="GtkLabel">
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
+                    <property name="halign">start</property>
                     <property name="label" translatable="yes">Ay</property>
                   </object>
                   <packing>
@@ -168,7 +177,8 @@
                   <object class="GtkLabel">
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
-                    <property name="label" translatable="yes">Wx</property>
+                    <property name="halign">start</property>
+                    <property name="label" translatable="yes">Wx, Hz</property>
                   </object>
                   <packing>
                     <property name="left_attach">0</property>
@@ -179,7 +189,8 @@
                   <object class="GtkLabel">
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
-                    <property name="label" translatable="yes">Wy</property>
+                    <property name="halign">start</property>
+                    <property name="label" translatable="yes">Wy, Hz</property>
                   </object>
                   <packing>
                     <property name="left_attach">0</property>
@@ -190,7 +201,8 @@
                   <object class="GtkLabel">
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
-                    <property name="label" translatable="yes">Fx</property>
+                    <property name="halign">start</property>
+                    <property name="label" translatable="yes">Fx, 2 pi</property>
                   </object>
                   <packing>
                     <property name="left_attach">0</property>
@@ -201,11 +213,38 @@
                   <object class="GtkLabel">
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
-                    <property name="label" translatable="yes">Fy</property>
+                    <property name="halign">start</property>
+                    <property name="label" translatable="yes">Fy, 2 pi</property>
                   </object>
                   <packing>
                     <property name="left_attach">0</property>
                     <property name="top_attach">5</property>
+                  </packing>
+                </child>
+                <child>
+                  <object class="GtkLabel">
+                    <property name="visible">True</property>
+                    <property name="can_focus">False</property>
+                    <property name="halign">start</property>
+                    <property name="label" translatable="yes">Delay, s</property>
+                  </object>
+                  <packing>
+                    <property name="left_attach">0</property>
+                    <property name="top_attach">6</property>
+                  </packing>
+                </child>
+                <child>
+                  <object class="GtkSpinButton">
+                    <property name="visible">True</property>
+                    <property name="can_focus">True</property>
+                    <property name="hexpand">True</property>
+                    <property name="xalign">1</property>
+                    <property name="adjustment">delay</property>
+                    <property name="digits">2</property>
+                  </object>
+                  <packing>
+                    <property name="left_attach">1</property>
+                    <property name="top_attach">6</property>
                   </packing>
                 </child>
               </object>
