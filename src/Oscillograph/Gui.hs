@@ -25,7 +25,7 @@ fps :: Double
 fps = 50.0
 
 delay :: Double
-delay = 100.0
+delay = 10.0
 
 pointsMaxCount :: Int
 pointsMaxCount = round (fps * delay)
@@ -62,12 +62,24 @@ data UI = UI
   , uiPlayPause :: !Stack
   , uiPlay :: !Button
   , uiPause :: !Button
+  , uiAmplitudeX :: !Adjustment
+  , uiAmplitudeY :: !Adjustment
+  , uiFrequencyX :: !Adjustment
+  , uiFrequencyY :: !Adjustment
+  , uiPhaseX :: !Adjustment
+  , uiPhaseY :: !Adjustment
   }
 
 frame :: IO Double -> UI -> Plot -> ConnectId DrawingArea -> ConnectId Button -> IO Bool
 frame timer ui plot draw_id play_click_id = do
   t <- timer
-  let new_plot = addPoint (0.8 * cos (1.0 * t), 0.7 * cos(1.5 * t)) plot
+  a_x <- K.get (uiAmplitudeX ui) adjustmentValue
+  a_y <- K.get (uiAmplitudeY ui) adjustmentValue
+  w_x <- K.get (uiFrequencyX ui) adjustmentValue
+  w_y <- K.get (uiFrequencyY ui) adjustmentValue
+  f_x <- K.get (uiPhaseX ui) adjustmentValue
+  f_y <- K.get (uiPhaseY ui) adjustmentValue
+  let new_plot = addPoint (a_x * cos (w_x * t + f_x), a_y * cos (w_y * t + f_y)) plot
   paused <- (Just (castToWidget $ uiPlay ui) ==) <$> K.get (uiPlayPause ui) stackVisibleChild
   signalDisconnect draw_id
   if paused
@@ -115,7 +127,13 @@ oscillograph = do
   play_pause <- builderGetObject b castToStack ("playPause" :: S.Text)
   play <- builderGetObject b castToButton ("play" :: S.Text)
   pause <- builderGetObject b castToButton ("pause" :: S.Text)
-  let ui = UI canvas play_pause play pause
+  a_x <- builderGetObject b castToAdjustment ("amplitudeX" :: S.Text)
+  a_y <- builderGetObject b castToAdjustment ("amplitudeY" :: S.Text)
+  w_x <- builderGetObject b castToAdjustment ("frequencyX" :: S.Text)
+  w_y <- builderGetObject b castToAdjustment ("frequencyY" :: S.Text)
+  f_x <- builderGetObject b castToAdjustment ("phaseX" :: S.Text)
+  f_y <- builderGetObject b castToAdjustment ("phaseY" :: S.Text)
+  let ui = UI canvas play_pause play pause a_x a_y w_x w_y f_x f_y
   void $ mfix $ \sid -> on play buttonActivated $ playClick ui emptyPlot (Just 0.0) sid
   void $ on pause buttonActivated $ pauseClick ui
   widgetShowAll window
