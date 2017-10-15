@@ -1,6 +1,6 @@
 module Main where
 
-import Lib
+import qualified Oscillograph.Gui
 
 main :: IO ()
-main = someFunc
+main = Oscillograph.Gui.oscillograph

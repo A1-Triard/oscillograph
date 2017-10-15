@@ -15,8 +15,10 @@ cabal-version: >=1.10
 
 library
   hs-source-dirs: src
-  exposed-modules: Lib
+  exposed-modules: Oscillograph.Gui
   build-depends: base >= 4.7 && < 5
+               , gtk3
+               , text
   default-extensions: BangPatterns
                     , CPP
                     , DataKinds
@@ -112,6 +114,8 @@ test-suite oscillograph-core-test
   build-depends: base
                , HUnit
                , oscillograph-core
+               , gtk3
+               , text
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
   default-extensions: BangPatterns
                     , CPP
