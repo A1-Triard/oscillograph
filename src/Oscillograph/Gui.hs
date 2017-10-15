@@ -80,28 +80,30 @@ frame timer ui plot draw_id play_click_id = do
   f_x <- K.get (uiPhaseX ui) adjustmentValue
   f_y <- K.get (uiPhaseY ui) adjustmentValue
   let new_plot = addPoint (a_x * cos (w_x * t + f_x), a_y * cos (w_y * t + f_y)) plot
-  paused <- (Just (castToWidget $ uiPlay ui) ==) <$> K.get (uiPlayPause ui) stackVisibleChild
   signalDisconnect draw_id
-  if paused
-    then do
-      signalDisconnect play_click_id
-      void $ mfix $ \sid -> on (uiPlay ui) buttonActivated $ playClick ui new_plot (Just t) sid
-    else
-      queueFrame timer ui new_plot play_click_id
+  queueFrame timer ui new_plot play_click_id
   return False
 
 queueFrame :: IO Double -> UI -> Plot -> ConnectId Button -> IO ()
 queueFrame timer ui plot play_click_id = do
   draw_id <- on (uiCanvas ui) draw $ drawPlot (uiCanvas ui) plot
   widgetQueueDraw (uiCanvas ui)
-  void $ timeoutAdd (frame timer ui plot draw_id play_click_id) $ round (1000.0 / fps)
+  paused <- (Just (castToWidget $ uiPlay ui) ==) <$> K.get (uiPlayPause ui) stackVisibleChild
+  if paused
+    then do
+      signalDisconnect play_click_id
+      t <- timer
+      void $ mfix $ \sid -> on (uiPlay ui) buttonActivated $ playClick ui plot (Just (t, Just draw_id)) sid
+    else do
+      void $ timeoutAdd (frame timer ui plot draw_id play_click_id) $ round (1000.0 / fps)
 
-playClick :: UI -> Plot -> Maybe Double -> ConnectId Button -> IO ()
+playClick :: UI -> Plot -> Maybe (Double, Maybe (ConnectId DrawingArea)) -> ConnectId Button -> IO ()
 playClick ui plot paused play_click_id = do
   K.set (uiPlayPause ui) [stackVisibleChild := castToWidget (uiPause ui)]
   case paused of
     Nothing -> return ()
-    Just t0 -> do
+    Just (t0, draw_id) -> do
+      maybe (return ()) signalDisconnect draw_id
       signalDisconnect play_click_id
       new_play_click_id <- mfix $ \sid -> on (uiPlay ui) buttonActivated $ playClick ui plot Nothing sid
       current_seconds <- currentSeconds
@@ -134,7 +136,7 @@ oscillograph = do
   f_x <- builderGetObject b castToAdjustment ("phaseX" :: S.Text)
   f_y <- builderGetObject b castToAdjustment ("phaseY" :: S.Text)
   let ui = UI canvas play_pause play pause a_x a_y w_x w_y f_x f_y
-  void $ mfix $ \sid -> on play buttonActivated $ playClick ui emptyPlot (Just 0.0) sid
+  void $ mfix $ \sid -> on play buttonActivated $ playClick ui emptyPlot (Just (0.0, Nothing)) sid
   void $ on pause buttonActivated $ pauseClick ui
   widgetShowAll window
   mainGUI
