@@ -24,8 +24,25 @@ import Paths_oscillograph_core
 fps :: Double
 fps = 50.0
 
-drawPlot :: DrawingArea -> [(Double, Double)] -> Render ()
-drawPlot canvas points = do
+delay :: Double
+delay = 100.0
+
+pointsMaxCount :: Int
+pointsMaxCount = round (fps * delay)
+
+data Plot = Plot !Int ![(Double, Double)]
+
+emptyPlot :: Plot
+emptyPlot = Plot 0 []
+
+addPoint :: (Double, Double) -> Plot -> Plot
+addPoint point (Plot points_count points) =
+  let increased_points_count = points_count + 1 in
+  let drop_count = max 0 (increased_points_count - pointsMaxCount) in
+  Plot (increased_points_count - drop_count) $ drop drop_count $ points `snoc` point
+
+drawPlot :: DrawingArea -> Plot -> Render ()
+drawPlot canvas (Plot _ points) = do
   case uncons points of
     Nothing -> return ()
     Just ((begin_x, begin_y), steps) -> do
@@ -40,36 +57,36 @@ drawPlot canvas points = do
         lineTo (x0 + amplitude * x) (y0 - amplitude * y)
       stroke
 
-frame :: IO Double -> DrawingArea -> Stack -> Button -> Button -> [(Double, Double)] -> ConnectId DrawingArea -> ConnectId Button -> IO Bool
-frame timer canvas play_pause play pause points draw_id play_click_id = do
+frame :: IO Double -> DrawingArea -> Stack -> Button -> Button -> Plot -> ConnectId DrawingArea -> ConnectId Button -> IO Bool
+frame timer canvas play_pause play pause plot draw_id play_click_id = do
   t <- timer
-  let new_points = points `snoc` (0.8 * cos (1.0 * t), 0.7 * cos(1.5 * t))
+  let new_plot = addPoint (0.8 * cos (1.0 * t), 0.7 * cos(1.5 * t)) plot
   paused <- (Just (castToWidget play) ==) <$> K.get play_pause stackVisibleChild
   signalDisconnect draw_id
   if paused
     then do
       signalDisconnect play_click_id
-      void $ mfix $ \sid -> on play buttonActivated $ playClick canvas play_pause play pause new_points (Just t) sid
+      void $ mfix $ \sid -> on play buttonActivated $ playClick canvas play_pause play pause new_plot (Just t) sid
     else
-      queueFrame timer canvas play_pause play pause new_points play_click_id
+      queueFrame timer canvas play_pause play pause new_plot play_click_id
   return False
 
-queueFrame :: IO Double -> DrawingArea -> Stack -> Button -> Button -> [(Double, Double)] -> ConnectId Button -> IO ()
-queueFrame timer canvas play_pause play pause points play_click_id = do
-  draw_id <- on canvas draw $ drawPlot canvas points
+queueFrame :: IO Double -> DrawingArea -> Stack -> Button -> Button -> Plot -> ConnectId Button -> IO ()
+queueFrame timer canvas play_pause play pause plot play_click_id = do
+  draw_id <- on canvas draw $ drawPlot canvas plot
   widgetQueueDraw canvas
-  void $ timeoutAdd (frame timer canvas play_pause play pause points draw_id play_click_id) $ round (1000.0 / fps)
+  void $ timeoutAdd (frame timer canvas play_pause play pause plot draw_id play_click_id) $ round (1000.0 / fps)
 
-playClick :: DrawingArea -> Stack -> Button -> Button -> [(Double, Double)] -> Maybe Double -> ConnectId Button -> IO ()
-playClick canvas play_pause play pause points paused play_click_id = do
+playClick :: DrawingArea -> Stack -> Button -> Button -> Plot -> Maybe Double -> ConnectId Button -> IO ()
+playClick canvas play_pause play pause plot paused play_click_id = do
   K.set play_pause [stackVisibleChild := castToWidget pause]
   case paused of
     Nothing -> return ()
     Just t0 -> do
       signalDisconnect play_click_id
-      new_play_click_id <- mfix $ \sid -> on play buttonActivated $ playClick canvas play_pause play pause points Nothing sid
+      new_play_click_id <- mfix $ \sid -> on play buttonActivated $ playClick canvas play_pause play pause plot Nothing sid
       current_seconds <- currentSeconds
-      queueFrame (((+ t0) . subtract current_seconds) <$> currentSeconds) canvas play_pause play pause points new_play_click_id
+      queueFrame (((+ t0) . subtract current_seconds) <$> currentSeconds) canvas play_pause play pause plot new_play_click_id
 
 pauseClick :: Stack -> Button -> IO ()
 pauseClick play_pause play = do
@@ -91,7 +108,7 @@ oscillograph = do
   play_pause <- builderGetObject b castToStack ("playPause" :: S.Text)
   play <- builderGetObject b castToButton ("play" :: S.Text)
   pause <- builderGetObject b castToButton ("pause" :: S.Text)
-  void $ mfix $ \sid -> on play buttonActivated $ playClick canvas play_pause play pause [] (Just 0.0) sid
+  void $ mfix $ \sid -> on play buttonActivated $ playClick canvas play_pause play pause emptyPlot (Just 0.0) sid
   void $ on pause buttonActivated $ pauseClick play_pause play
   widgetShowAll window
   mainGUI
