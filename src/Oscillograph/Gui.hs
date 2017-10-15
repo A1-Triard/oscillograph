@@ -166,9 +166,9 @@ updateMaxFrequency ui = do
   min_delay <- K.get (uiDelay ui) adjustmentLower
   let max_frequency = delayK / min_delay
   frequency_x <- K.get (uiFrequencyX ui) adjustmentValue
-  frequency_y <- K.get (uiFrequencyX ui) adjustmentValue
+  frequency_y <- K.get (uiFrequencyY ui) adjustmentValue
   min_frequency_x <- K.get (uiFrequencyX ui) adjustmentLower
-  min_frequency_y <- K.get (uiFrequencyX ui) adjustmentLower
+  min_frequency_y <- K.get (uiFrequencyY ui) adjustmentLower
   K.set (uiFrequencyX ui) [adjustmentUpper := max_frequency, adjustmentLower := min min_frequency_x max_frequency, adjustmentValue := min frequency_x max_frequency]
   K.set (uiFrequencyY ui) [adjustmentUpper := max_frequency, adjustmentLower := min min_frequency_y max_frequency, adjustmentValue := min frequency_y max_frequency]
 
