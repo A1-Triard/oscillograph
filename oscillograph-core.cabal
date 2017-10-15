@@ -12,13 +12,16 @@ category: Web
 build-type: Simple
 -- extra-source-files:
 cabal-version: >=1.10
+data-files: ui.glade
 
 library
   hs-source-dirs: src
   exposed-modules: Oscillograph.Gui
+  other-modules: Paths_oscillograph_core
   build-depends: base >= 4.7 && < 5
                , gtk3
                , text
+               , transformers
   default-extensions: BangPatterns
                     , CPP
                     , DataKinds
@@ -116,6 +119,7 @@ test-suite oscillograph-core-test
                , oscillograph-core
                , gtk3
                , text
+               , transformers
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
   default-extensions: BangPatterns
                     , CPP

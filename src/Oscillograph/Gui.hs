@@ -19,18 +19,15 @@ module Oscillograph.Gui
   ) where
 
 #include <haskell>
+import Paths_oscillograph_core
 
 oscillograph :: IO ()
 oscillograph = do
   void initGUI
-  window <- windowNew
-  K.set window [windowTitle := ("Hello, world!" :: S.Text)]
-  containerSetBorderWidth window 10
-  windowSetPosition window WinPosCenter
-  windowSetDefaultSize window 350 70
-  void $ on window objectDestroy mainQuit
-  label <- labelNew $ Just ("Hello, world!" :: S.Text)
-  containerAdd window label
+  b <- builderNew
+  builderAddFromFile b =<< getDataFileName "ui.glade"
+  window <- builderGetObject b castToWindow ("applicationWindow" :: S.Text)
+  void $ on window deleteEvent $ tryEvent $ lift mainQuit
   widgetShowAll window
   mainGUI
   return ()
