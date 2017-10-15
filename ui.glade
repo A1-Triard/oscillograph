@@ -100,7 +100,7 @@
                     <property name="hexpand">True</property>
                     <property name="xalign">1</property>
                     <property name="adjustment">frequencyX</property>
-                    <property name="digits">1</property>
+                    <property name="digits">3</property>
                   </object>
                   <packing>
                     <property name="left_attach">1</property>
@@ -114,7 +114,7 @@
                     <property name="hexpand">True</property>
                     <property name="xalign">1</property>
                     <property name="adjustment">frequencyY</property>
-                    <property name="digits">1</property>
+                    <property name="digits">3</property>
                   </object>
                   <packing>
                     <property name="left_attach">1</property>

@@ -178,6 +178,18 @@ updateDelayStep ui = do
   let s = 10.0 ** fromIntegral (floor (logBase 10.0 delay) - 1 :: Int)
   K.set (uiDelay ui) [adjustmentStepIncrement := s, adjustmentPageIncrement := 10.0 * s]
 
+updateFrequencyXStep :: UI -> IO ()
+updateFrequencyXStep ui = do
+  frequency <- K.get (uiFrequencyX ui) adjustmentValue
+  let s = max 0.001 $ 10.0 ** fromIntegral (floor (logBase 10.0 frequency) - 4 :: Int)
+  K.set (uiFrequencyX ui) [adjustmentStepIncrement := s, adjustmentPageIncrement := 10.0 * s]
+
+updateFrequencyYStep :: UI -> IO ()
+updateFrequencyYStep ui = do
+  frequency <- K.get (uiFrequencyY ui) adjustmentValue
+  let s = max 0.001 $ 10.0 ** fromIntegral (floor (logBase 10.0 frequency) - 4 :: Int)
+  K.set (uiFrequencyY ui) [adjustmentStepIncrement := s, adjustmentPageIncrement := 10.0 * s]
+
 oscillograph :: IO ()
 oscillograph = do
   void initGUI
@@ -201,8 +213,14 @@ oscillograph = do
   updateMaxFrequency ui
   updateMaxDelay ui
   updateDelayStep ui
-  void $ onValueChanged w_x $ updateMaxDelay ui
-  void $ onValueChanged w_y $ updateMaxDelay ui
+  updateFrequencyXStep ui
+  updateFrequencyYStep ui
+  void $ onValueChanged w_x $ do
+    updateMaxDelay ui
+    updateFrequencyXStep ui
+  void $ onValueChanged w_y $ do
+    updateMaxDelay ui
+    updateFrequencyYStep ui
   void $ onValueChanged delay $ updateDelayStep ui
   void $ mfix $ \sid -> on play buttonActivated $ playClick ui emptyPlot (Just (0.0, Nothing)) sid Nothing
   void $ on pause buttonActivated $ pauseClick ui
