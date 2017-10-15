@@ -18,8 +18,8 @@
     <property name="lower">0.01</property>
     <property name="upper">60</property>
     <property name="value">0.10000000000000001</property>
-    <property name="step_increment">0.10000000000000001</property>
-    <property name="page_increment">1</property>
+    <property name="step_increment">0.01</property>
+    <property name="page_increment">0.10000000000000001</property>
   </object>
   <object class="GtkAdjustment" id="frequencyX">
     <property name="upper">5000</property>
@@ -128,7 +128,7 @@
                     <property name="hexpand">True</property>
                     <property name="xalign">1</property>
                     <property name="adjustment">phaseX</property>
-                    <property name="digits">2</property>
+                    <property name="digits">3</property>
                   </object>
                   <packing>
                     <property name="left_attach">1</property>
@@ -142,7 +142,7 @@
                     <property name="hexpand">True</property>
                     <property name="xalign">1</property>
                     <property name="adjustment">phaseY</property>
-                    <property name="digits">2</property>
+                    <property name="digits">3</property>
                   </object>
                   <packing>
                     <property name="left_attach">1</property>
@@ -240,7 +240,7 @@
                     <property name="hexpand">True</property>
                     <property name="xalign">1</property>
                     <property name="adjustment">delay</property>
-                    <property name="digits">2</property>
+                    <property name="digits">3</property>
                   </object>
                   <packing>
                     <property name="left_attach">1</property>

@@ -172,6 +172,12 @@ updateMaxFrequency ui = do
   K.set (uiFrequencyX ui) [adjustmentUpper := max_frequency, adjustmentLower := min min_frequency_x max_frequency, adjustmentValue := min frequency_x max_frequency]
   K.set (uiFrequencyY ui) [adjustmentUpper := max_frequency, adjustmentLower := min min_frequency_y max_frequency, adjustmentValue := min frequency_y max_frequency]
 
+updateDelayStep :: UI -> IO ()
+updateDelayStep ui = do
+  delay <- K.get (uiDelay ui) adjustmentValue
+  let s = 10.0 ** fromIntegral (floor (logBase 10.0 delay) - 1 :: Int)
+  K.set (uiDelay ui) [adjustmentStepIncrement := s, adjustmentPageIncrement := 10.0 * s]
+
 oscillograph :: IO ()
 oscillograph = do
   void initGUI
@@ -194,8 +200,10 @@ oscillograph = do
   let ui = UI canvas play_pause play pause clear a_x a_y w_x w_y f_x f_y delay
   updateMaxFrequency ui
   updateMaxDelay ui
+  updateDelayStep ui
   void $ onValueChanged w_x $ updateMaxDelay ui
   void $ onValueChanged w_y $ updateMaxDelay ui
+  void $ onValueChanged delay $ updateDelayStep ui
   void $ mfix $ \sid -> on play buttonActivated $ playClick ui emptyPlot (Just (0.0, Nothing)) sid Nothing
   void $ on pause buttonActivated $ pauseClick ui
   widgetShowAll window
