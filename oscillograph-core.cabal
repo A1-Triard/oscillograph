@@ -19,7 +19,10 @@ library
   exposed-modules: Oscillograph.Gui
   other-modules: Paths_oscillograph_core
   build-depends: base >= 4.7 && < 5
+               , cairo
+               , clock
                , gtk3
+               , lens
                , text
                , transformers
   default-extensions: BangPatterns
@@ -117,7 +120,10 @@ test-suite oscillograph-core-test
   build-depends: base
                , HUnit
                , oscillograph-core
+               , cairo
+               , clock
                , gtk3
+               , lens
                , text
                , transformers
   ghc-options: -threaded -rtsopts -with-rtsopts=-N

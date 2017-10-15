@@ -21,6 +21,65 @@ module Oscillograph.Gui
 #include <haskell>
 import Paths_oscillograph_core
 
+fps :: Double
+fps = 50.0
+
+drawPlot :: DrawingArea -> [(Double, Double)] -> Render ()
+drawPlot canvas points = do
+  case uncons points of
+    Nothing -> return ()
+    Just ((begin_x, begin_y), steps) -> do
+      Rectangle _ _ w h <- liftIO $ widgetGetAllocation canvas
+      let x0 = fromIntegral w / 2.0
+      let y0 = fromIntegral h / 2.0
+      let amplitude = fromIntegral (min w h) / 2.0
+      setLineWidth 1.0
+      setSourceRGB 0.3 0.6 0.6
+      moveTo (x0 + amplitude * begin_x) (y0 - amplitude * begin_y)
+      forM_ steps $ \(x, y) -> do
+        lineTo (x0 + amplitude * x) (y0 - amplitude * y)
+      stroke
+
+frame :: IO Double -> DrawingArea -> Stack -> Button -> Button -> [(Double, Double)] -> ConnectId DrawingArea -> ConnectId Button -> IO Bool
+frame timer canvas play_pause play pause points draw_id play_click_id = do
+  t <- timer
+  let new_points = points `snoc` (0.8 * cos (1.0 * t), 0.7 * cos(1.5 * t))
+  paused <- (Just (castToWidget play) ==) <$> K.get play_pause stackVisibleChild
+  signalDisconnect draw_id
+  if paused
+    then do
+      signalDisconnect play_click_id
+      void $ mfix $ \sid -> on play buttonActivated $ playClick canvas play_pause play pause new_points (Just t) sid
+    else
+      queueFrame timer canvas play_pause play pause new_points play_click_id
+  return False
+
+queueFrame :: IO Double -> DrawingArea -> Stack -> Button -> Button -> [(Double, Double)] -> ConnectId Button -> IO ()
+queueFrame timer canvas play_pause play pause points play_click_id = do
+  draw_id <- on canvas draw $ drawPlot canvas points
+  widgetQueueDraw canvas
+  void $ timeoutAdd (frame timer canvas play_pause play pause points draw_id play_click_id) $ round (1000.0 / fps)
+
+playClick :: DrawingArea -> Stack -> Button -> Button -> [(Double, Double)] -> Maybe Double -> ConnectId Button -> IO ()
+playClick canvas play_pause play pause points paused play_click_id = do
+  K.set play_pause [stackVisibleChild := castToWidget pause]
+  case paused of
+    Nothing -> return ()
+    Just t0 -> do
+      signalDisconnect play_click_id
+      new_play_click_id <- mfix $ \sid -> on play buttonActivated $ playClick canvas play_pause play pause points Nothing sid
+      current_seconds <- currentSeconds
+      queueFrame (((+ t0) . subtract current_seconds) <$> currentSeconds) canvas play_pause play pause points new_play_click_id
+
+pauseClick :: Stack -> Button -> IO ()
+pauseClick play_pause play = do
+  K.set play_pause [stackVisibleChild := castToWidget play]
+
+currentSeconds :: IO Double
+currentSeconds = do
+  t <- getTime Monotonic
+  return $ fromIntegral (sec t) + fromIntegral (nsec t) * 1e-9
+
 oscillograph :: IO ()
 oscillograph = do
   void initGUI
@@ -28,6 +87,12 @@ oscillograph = do
   builderAddFromFile b =<< getDataFileName "ui.glade"
   window <- builderGetObject b castToWindow ("applicationWindow" :: S.Text)
   void $ on window deleteEvent $ tryEvent $ lift mainQuit
+  canvas <- builderGetObject b castToDrawingArea ("drawingArea" :: S.Text)
+  play_pause <- builderGetObject b castToStack ("playPause" :: S.Text)
+  play <- builderGetObject b castToButton ("play" :: S.Text)
+  pause <- builderGetObject b castToButton ("pause" :: S.Text)
+  void $ mfix $ \sid -> on play buttonActivated $ playClick canvas play_pause play pause [] (Just 0.0) sid
+  void $ on pause buttonActivated $ pauseClick play_pause play
   widgetShowAll window
   mainGUI
   return ()
