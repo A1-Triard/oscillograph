@@ -36,10 +36,10 @@ emptyPlot :: Plot
 emptyPlot = Plot 0.0 0 []
 
 addPoint :: Int -> Double -> (Double -> (Double, Double)) -> Plot -> Plot
-addPoint max_points_count time_delta point (Plot time points_count points) =
+addPoint max_points_count dt point (Plot time points_count points) =
   let increased_points_count = points_count + 1 in
   let drop_count = max 0 (increased_points_count - max_points_count) in
-  let new_time = time + time_delta in
+  let new_time = time + dt in
   Plot new_time (increased_points_count - drop_count) $ drop drop_count $ points `snoc` point new_time
 
 drawPlot :: Int -> DrawingArea -> Plot -> Render ()
@@ -96,19 +96,40 @@ data UIData = UIData
   }
 makeLenses ''UIData
 
+data PlotParams = PlotParams
+  { amplitudeX :: !Double
+  , amplitudeY :: !Double
+  , frequencyX :: !Double
+  , frequencyY :: !Double
+  , phaseX :: !Double
+  , phaseY :: !Double
+  , plotDelay :: !Double
+  }
+
+plotParams :: UI -> IO PlotParams
+plotParams ui = do
+  amplitude_x <- K.get (uiAmplitudeX ui) adjustmentValue
+  amplitude_y <- K.get (uiAmplitudeY ui) adjustmentValue
+  frequency_x <- K.get (uiFrequencyX ui) adjustmentValue
+  frequency_y <- K.get (uiFrequencyY ui) adjustmentValue
+  phase_x <- K.get (uiPhaseX ui) adjustmentValue
+  phase_y <- K.get (uiPhaseY ui) adjustmentValue
+  delay <- K.get (uiDelay ui) adjustmentValue
+  return $ PlotParams amplitude_x amplitude_y frequency_x frequency_y phase_x phase_y delay
+
+calcPoint :: PlotParams -> Double -> (Double, Double)
+calcPoint params t =
+  ( amplitudeX params * cos (2.0 * pi * (frequencyX params * t + phaseX params))
+  , amplitudeY params * cos (2.0 * pi * (frequencyY params * t + phaseY params))
+  )
+
 frame :: IO Double -> UI -> IORef UIData -> Maybe (ConnectId DrawingArea) -> ConnectId Button -> Maybe (ConnectId Button) -> IO Bool
 frame timer ui d draw_id play_click_id clear_click_id = do
   t1 <- timer
-  a_x <- K.get (uiAmplitudeX ui) adjustmentValue
-  a_y <- K.get (uiAmplitudeY ui) adjustmentValue
-  w_x <- K.get (uiFrequencyX ui) adjustmentValue
-  w_y <- K.get (uiFrequencyY ui) adjustmentValue
-  f_x <- K.get (uiPhaseX ui) adjustmentValue
-  f_y <- K.get (uiPhaseY ui) adjustmentValue
-  delay <- K.get (uiDelay ui) adjustmentValue
-  let dt = dtK / max w_x w_y
-  let max_points_count = round (delay / dt)
-  modifyIORef' d $ over dPlot $ \plot -> snd $ fromMaybe (error "frame") $ unsnoc $ takeWhile (\(Plot t _ _) -> t <= t1) $ iterate (addPoint max_points_count dt $ \t -> (a_x * cos (2.0 * pi * (w_x * t + f_x)), a_y * cos (2.0 * pi * (w_y * t + f_y)))) plot
+  params <- plotParams ui
+  let dt = dtK / max (frequencyX params) (frequencyY params)
+  let max_points_count = round (plotDelay params / dt)
+  modifyIORef' d $ over dPlot $ \plot -> snd $ fromMaybe (error "frame") $ unsnoc $ takeWhile (\(Plot t _ _) -> t <= t1) $ iterate (addPoint max_points_count dt $ \t -> calcPoint params t) plot
   maybe (return ()) signalDisconnect draw_id
   maybe (return ()) signalDisconnect clear_click_id
   void $ queueFrame max_points_count timer ui d play_click_id
