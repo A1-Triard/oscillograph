@@ -107,7 +107,7 @@ data UIData = UIData
   { _dPlot  :: !Plot
   , _dPaused :: !Bool
   , _dStartTime :: !Double
-  , _dFrame :: !(Maybe HandlerId)
+  , _dPaused2 :: !Bool
   }
 makeLenses ''UIData
 
@@ -164,25 +164,21 @@ frame ui d = do
   paused <- (Just (castToWidget $ uiPlay ui) ==) <$> K.get (uiPlayPause ui) stackVisibleChild
   if paused
     then
-      modifyIORef' d $ set dPaused True . set dStartTime t . set dFrame Nothing
+      modifyIORef' d $ set dPaused True . set dStartTime t . set dPaused2 True
     else do
-      frame_id <- timeoutAdd (frame ui d >> return False) $ round (1000.0 / fps)
-      modifyIORef' d $ set dFrame (Just frame_id)
+      void $ timeoutAdd (frame ui d >> return False) $ round (1000.0 / fps)
+      modifyIORef' d $ set dPaused2 False
 
 clearClick :: UI -> IORef UIData -> IO ()
 clearClick ui d = do
-  maybe_frame_id <- view dFrame <$> readIORef d
-  case maybe_frame_id of
-    Nothing -> do
-      widgetQueueDraw (uiCanvas ui)
+  paused <- view dPaused2 <$> readIORef d
+  if paused
+    then
       modifyIORef' d $ set dPlot emptyPlot . set dPaused True . set dStartTime 0.0
-    Just frame_id -> do
-      timeoutRemove frame_id
-      widgetQueueDraw (uiCanvas ui)
-      modifyIORef' d $ set dPlot emptyPlot . set dPaused False
-      currentSeconds >>= \t -> modifyIORef' d (set dStartTime t)
-      new_frame_id <- timeoutAdd (frame ui d >> return False) $ round (1000.0 / fps)
-      modifyIORef' d $ set dFrame (Just new_frame_id)
+    else do
+      t <- currentSeconds
+      modifyIORef' d $ set dPlot emptyPlot . set dPaused False . set dStartTime t
+  widgetQueueDraw (uiCanvas ui)
 
 playClick :: UI -> IORef UIData -> IO ()
 playClick ui d = do
@@ -259,7 +255,7 @@ oscillograph = do
     updateMaxDelay ui
     updateFrequencyYStep ui
   void $ onValueChanged (uiDelay ui) $ updateDelayStep ui
-  d <- newIORef $ UIData emptyPlot True 0.0 Nothing
+  d <- newIORef $ UIData emptyPlot True 0.0 True
   void $ on (uiCanvas ui) draw $ canvasDraw ui d
   void $ on (uiPlay ui) buttonActivated $ playClick ui d
   void $ on (uiPause ui) buttonActivated $ pauseClick ui
