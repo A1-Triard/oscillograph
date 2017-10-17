@@ -146,18 +146,13 @@ canvasDraw ui d = do
   plot <- liftIO $ view dPlot <$> readIORef d
   drawPlot (uiCanvas ui) plot
 
-frame :: UI -> IORef UIData -> IO Bool
-frame ui d = do
-  queueFrame ui d
-  return False
-
 timer :: IORef UIData -> IO Double
 timer d = do
   t0 <- view dStartTime <$> readIORef d
   (subtract t0) <$> currentSeconds
 
-queueFrame :: UI -> IORef UIData -> IO ()
-queueFrame ui d = do
+frame :: UI -> IORef UIData -> IO ()
+frame ui d = do
   params <- plotParams ui
   let dt = dtK / max (frequencyX params) (frequencyY params)
   t <- timer d
@@ -171,7 +166,7 @@ queueFrame ui d = do
     then
       modifyIORef' d $ set dPaused True . set dStartTime t . set dFrame Nothing
     else do
-      frame_id <- timeoutAdd (frame ui d) $ round (1000.0 / fps)
+      frame_id <- timeoutAdd (frame ui d >> return False) $ round (1000.0 / fps)
       modifyIORef' d $ set dFrame (Just frame_id)
 
 clearClick :: UI -> IORef UIData -> IO ()
@@ -186,7 +181,7 @@ clearClick ui d = do
       widgetQueueDraw (uiCanvas ui)
       modifyIORef' d $ set dPlot emptyPlot . set dPaused False
       currentSeconds >>= \t -> modifyIORef' d (set dStartTime t)
-      new_frame_id <- timeoutAdd (frame ui d) $ round (1000.0 / fps)
+      new_frame_id <- timeoutAdd (frame ui d >> return False) $ round (1000.0 / fps)
       modifyIORef' d $ set dFrame (Just new_frame_id)
 
 playClick :: UI -> IORef UIData -> IO ()
@@ -198,7 +193,7 @@ playClick ui d = do
     else do
       currentSeconds >>= \t -> modifyIORef' d (over dStartTime $ \t0 -> t - t0)
       modifyIORef' d $ set dPaused False
-      queueFrame ui d
+      frame ui d
 
 pauseClick :: UI -> IO ()
 pauseClick ui = do
