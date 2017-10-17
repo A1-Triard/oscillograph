@@ -107,6 +107,7 @@ data UIData = UIData
   { _dPlot  :: !Plot
   , _dPaused :: !Bool
   , _dStartTime :: !Double
+  , _dFrame :: !(Maybe HandlerId)
   }
 makeLenses ''UIData
 
@@ -170,33 +171,38 @@ queueFrame ui d play_click_id = do
   if paused
     then do
       signalDisconnect play_click_id
-      modifyIORef' d $ set dPaused True . set dStartTime t
+      modifyIORef' d $ set dPaused True . set dStartTime t . set dFrame Nothing
       mfix $ \new_clear_click_id -> do
         new_play_click_id <- mfix $ \sid -> on (uiPlay ui) buttonActivated $ playClick ui d sid (Just new_clear_click_id)
-        on (uiClear ui) buttonActivated $ clearClick ui d Nothing new_play_click_id (Just new_clear_click_id)
+        on (uiClear ui) buttonActivated $ clearClick ui d new_play_click_id (Just new_clear_click_id)
     else
       mfix $ \new_clear_click_id -> do
         frame_id <- timeoutAdd (frame ui d play_click_id (Just new_clear_click_id)) $ round (1000.0 / fps)
-        on (uiClear ui) buttonActivated $ clearClick ui d (Just frame_id) play_click_id (Just new_clear_click_id)
+        modifyIORef' d $ set dFrame (Just frame_id)
+        on (uiClear ui) buttonActivated $ clearClick ui d play_click_id (Just new_clear_click_id)
 
-clearClick :: UI -> IORef UIData -> Maybe HandlerId -> ConnectId Button -> Maybe (ConnectId Button) -> IO ()
-clearClick ui d Nothing play_click_id clear_click_id = do
-  maybe (return ()) signalDisconnect clear_click_id
-  signalDisconnect play_click_id
-  widgetQueueDraw (uiCanvas ui)
-  modifyIORef' d $ set dPlot emptyPlot . set dPaused True . set dStartTime 0.0
-  void $ mfix $ \sid -> on (uiPlay ui) buttonActivated $ playClick ui d sid Nothing
-clearClick ui d (Just frame_id) play_click_id clear_click_id = do
-  maybe (return ()) signalDisconnect clear_click_id
-  signalDisconnect play_click_id
-  timeoutRemove frame_id
-  widgetQueueDraw (uiCanvas ui)
-  modifyIORef' d $ set dPlot emptyPlot . set dPaused False
-  void $ mfix $ \new_clear_click_id -> do
-    new_play_click_id <- mfix $ \sid -> on (uiPlay ui) buttonActivated $ playClick ui d sid (Just new_clear_click_id)
-    currentSeconds >>= \t -> modifyIORef' d (set dStartTime t)
-    new_frame_id <- timeoutAdd (frame ui d new_play_click_id (Just new_clear_click_id)) $ round (1000.0 / fps)
-    on (uiClear ui) buttonActivated $ clearClick ui d (Just new_frame_id) new_play_click_id (Just new_clear_click_id)
+clearClick :: UI -> IORef UIData -> ConnectId Button -> Maybe (ConnectId Button) -> IO ()
+clearClick ui d play_click_id clear_click_id = do
+  maybe_frame_id <- view dFrame <$> readIORef d
+  case maybe_frame_id of
+    Nothing -> do
+      maybe (return ()) signalDisconnect clear_click_id
+      signalDisconnect play_click_id
+      widgetQueueDraw (uiCanvas ui)
+      modifyIORef' d $ set dPlot emptyPlot . set dPaused True . set dStartTime 0.0
+      void $ mfix $ \sid -> on (uiPlay ui) buttonActivated $ playClick ui d sid Nothing
+    Just frame_id -> do
+      maybe (return ()) signalDisconnect clear_click_id
+      signalDisconnect play_click_id
+      timeoutRemove frame_id
+      widgetQueueDraw (uiCanvas ui)
+      modifyIORef' d $ set dPlot emptyPlot . set dPaused False
+      void $ mfix $ \new_clear_click_id -> do
+        new_play_click_id <- mfix $ \sid -> on (uiPlay ui) buttonActivated $ playClick ui d sid (Just new_clear_click_id)
+        currentSeconds >>= \t -> modifyIORef' d (set dStartTime t)
+        new_frame_id <- timeoutAdd (frame ui d new_play_click_id (Just new_clear_click_id)) $ round (1000.0 / fps)
+        modifyIORef' d $ set dFrame (Just new_frame_id)
+        on (uiClear ui) buttonActivated $ clearClick ui d new_play_click_id (Just new_clear_click_id)
 
 playClick :: UI -> IORef UIData -> ConnectId Button -> Maybe (ConnectId Button) -> IO ()
 playClick ui d play_click_id clear_click_id = do
@@ -277,7 +283,7 @@ oscillograph = do
     updateMaxDelay ui
     updateFrequencyYStep ui
   void $ onValueChanged (uiDelay ui) $ updateDelayStep ui
-  d <- newIORef $ UIData emptyPlot True 0.0
+  d <- newIORef $ UIData emptyPlot True 0.0 Nothing
   void $ on (uiCanvas ui) draw $ canvasDraw ui d
   void $ mfix $ \sid -> on (uiPlay ui) buttonActivated $ playClick ui d sid Nothing
   void $ on (uiPause ui) buttonActivated $ pauseClick ui
