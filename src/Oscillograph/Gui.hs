@@ -31,24 +31,21 @@ delayK :: Double
 delayK = 10.0
 
 data Plot = Plot
-  { plotTime :: !Double
-  , maxPointsCount :: !Int
-  , pointsCount :: !Int
-  , plotPoints :: ![(Double, Double)]
+  { _plotTime :: !Double
+  , _maxPointsCount :: !Int
+  , _pointsCount :: !Int
+  , _plotPoints :: ![(Double, Double)]
   }
+makeLenses ''Plot
 
 emptyPlot :: Plot
 emptyPlot = Plot 0.0 0 0 []
 
 addPoint :: Double -> (Double -> (Double, Double)) -> Plot -> Plot
 addPoint dt point plot =
-  let tail_points = max 0 (pointsCount plot + 1 - maxPointsCount plot) in
-  let t = plotTime plot + dt in
-  plot
-    { plotTime = t
-    , pointsCount = pointsCount plot + 1 - tail_points
-    , plotPoints = drop tail_points $ plotPoints plot `snoc` point t
-    }
+  let tail_points = max 0 (view pointsCount plot + 1 - view maxPointsCount plot) in
+  let t = view plotTime plot + dt in
+  set plotTime t $ over pointsCount (\x -> x + 1 - tail_points) $ over plotPoints (\x -> drop tail_points $ x `snoc` point t) plot
 
 drawPlot :: DrawingArea -> Plot -> Render ()
 drawPlot canvas plot = do
@@ -56,14 +53,16 @@ drawPlot canvas plot = do
   let x0 = fromIntegral w / 2.0
   let y0 = fromIntegral h / 2.0
   let amplitude = fromIntegral (min w h) / 2.0
+  let max_points_count = view maxPointsCount plot
+  let points = view plotPoints plot
   setLineWidth 1.0
   forM_
     ( zip3
-        (iterate (+ 1) $ maxPointsCount plot `quot` 2 - pointsCount plot)
-        (plotPoints plot)
-        (drop 1 $ plotPoints plot)
+        (iterate (+ 1) $ max_points_count `quot` 2 - view pointsCount plot)
+        points
+        (drop 1 points)
     ) $ \(n, (x1, y1), (x2, y2)) -> do
-      setSourceRGBA 0.3 0.6 0.6 $ if n >= 0 then 1.0 else 1.0 + 2.0 * fromIntegral n / fromIntegral (maxPointsCount plot)
+      setSourceRGBA 0.3 0.6 0.6 $ if n >= 0 then 1.0 else 1.0 + 2.0 * fromIntegral n / fromIntegral max_points_count
       moveTo (x0 + amplitude * x1) (y0 - amplitude * y1)
       lineTo (x0 + amplitude * x2) (y0 - amplitude * y2)
       stroke
@@ -155,10 +154,10 @@ frame ui d = do
   params <- plotParams ui
   let dt = dtK / max (frequencyX params) (frequencyY params)
   t <- timer d
-  modifyIORef' d $ over dPlot $ \plot
-    -> takeLast ((<= t) . plotTime)
-    $  iterate (addPoint dt $ calcPoint params)
-    $  plot { maxPointsCount = round (plotDelay params / dt) }
+  modifyIORef' d $ over dPlot
+    $ takeLast ((<= t) . view plotTime)
+    . iterate (addPoint dt $ calcPoint params)
+    . set maxPointsCount (round (plotDelay params / dt))
   widgetQueueDraw (uiCanvas ui)
   pause_requested <- (Just (castToWidget $ uiPlay ui) ==) <$> K.get (uiPlayPause ui) stackVisibleChild
   if pause_requested
