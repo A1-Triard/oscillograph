@@ -139,9 +139,13 @@ calcPoint params t =
 takeLast :: (a -> Bool) -> [a] -> a
 takeLast cond = snd . fromMaybe (error "takeLast") . unsnoc . takeWhile cond
 
-frame :: IO Double -> UI -> IORef UIData -> Maybe (ConnectId DrawingArea) -> ConnectId Button -> Maybe (ConnectId Button) -> IO Bool
-frame timer ui d draw_id play_click_id clear_click_id = do
-  maybe (return ()) signalDisconnect draw_id
+canvasDraw :: UI -> IORef UIData -> Render ()
+canvasDraw ui d = do
+  plot <- liftIO $ view dPlot <$> readIORef d
+  drawPlot (uiCanvas ui) plot
+
+frame :: IO Double -> UI -> IORef UIData -> ConnectId Button -> Maybe (ConnectId Button) -> IO Bool
+frame timer ui d play_click_id clear_click_id = do
   maybe (return ()) signalDisconnect clear_click_id
   void $ queueFrame timer ui d play_click_id
   return False
@@ -155,32 +159,28 @@ queueFrame timer ui d play_click_id = do
     -> takeLast ((<= t) . plotTime)
     $  iterate (addPoint dt $ calcPoint params)
     $  plot { maxPointsCount = round (plotDelay params / dt) }
-  plot <- view dPlot <$> readIORef d
-  draw_id <- on (uiCanvas ui) draw $ drawPlot (uiCanvas ui) plot
   widgetQueueDraw (uiCanvas ui)
   paused <- (Just (castToWidget $ uiPlay ui) ==) <$> K.get (uiPlayPause ui) stackVisibleChild
   if paused
     then do
       signalDisconnect play_click_id
       mfix $ \new_clear_click_id -> do
-        new_play_click_id <- mfix $ \sid -> on (uiPlay ui) buttonActivated $ playClick ui d (Just (t, Just draw_id)) sid (Just new_clear_click_id)
-        on (uiClear ui) buttonActivated $ clearClick ui d Nothing (Just draw_id) new_play_click_id (Just new_clear_click_id)
+        new_play_click_id <- mfix $ \sid -> on (uiPlay ui) buttonActivated $ playClick ui d (Just t) sid (Just new_clear_click_id)
+        on (uiClear ui) buttonActivated $ clearClick ui d Nothing new_play_click_id (Just new_clear_click_id)
     else
       mfix $ \new_clear_click_id -> do
-        frame_id <- timeoutAdd (frame timer ui d (Just draw_id) play_click_id (Just new_clear_click_id)) $ round (1000.0 / fps)
-        on (uiClear ui) buttonActivated $ clearClick ui d (Just frame_id) (Just draw_id) play_click_id (Just new_clear_click_id)
+        frame_id <- timeoutAdd (frame timer ui d play_click_id (Just new_clear_click_id)) $ round (1000.0 / fps)
+        on (uiClear ui) buttonActivated $ clearClick ui d (Just frame_id) play_click_id (Just new_clear_click_id)
 
-clearClick :: UI -> IORef UIData -> Maybe HandlerId -> Maybe (ConnectId DrawingArea) -> ConnectId Button -> Maybe (ConnectId Button) -> IO ()
-clearClick ui d Nothing draw_id play_click_id clear_click_id = do
+clearClick :: UI -> IORef UIData -> Maybe HandlerId -> ConnectId Button -> Maybe (ConnectId Button) -> IO ()
+clearClick ui d Nothing play_click_id clear_click_id = do
   maybe (return ()) signalDisconnect clear_click_id
-  maybe (return ()) signalDisconnect draw_id
   signalDisconnect play_click_id
   widgetQueueDraw (uiCanvas ui)
   modifyIORef' d $ set dPlot emptyPlot
-  void $ mfix $ \sid -> on (uiPlay ui) buttonActivated $ playClick ui d (Just (0, Nothing)) sid Nothing
-clearClick ui d (Just frame_id) draw_id play_click_id clear_click_id = do
+  void $ mfix $ \sid -> on (uiPlay ui) buttonActivated $ playClick ui d (Just 0) sid Nothing
+clearClick ui d (Just frame_id) play_click_id clear_click_id = do
   maybe (return ()) signalDisconnect clear_click_id
-  maybe (return ()) signalDisconnect draw_id
   signalDisconnect play_click_id
   timeoutRemove frame_id
   widgetQueueDraw (uiCanvas ui)
@@ -188,16 +188,15 @@ clearClick ui d (Just frame_id) draw_id play_click_id clear_click_id = do
   void $ mfix $ \new_clear_click_id -> do
     new_play_click_id <- mfix $ \sid -> on (uiPlay ui) buttonActivated $ playClick ui d Nothing sid (Just new_clear_click_id)
     current_seconds <- currentSeconds
-    new_frame_id <- timeoutAdd (frame ((subtract current_seconds) <$> currentSeconds) ui d Nothing new_play_click_id (Just new_clear_click_id)) $ round (1000.0 / fps)
-    on (uiClear ui) buttonActivated $ clearClick ui d (Just new_frame_id) Nothing new_play_click_id (Just new_clear_click_id)
+    new_frame_id <- timeoutAdd (frame ((subtract current_seconds) <$> currentSeconds) ui d new_play_click_id (Just new_clear_click_id)) $ round (1000.0 / fps)
+    on (uiClear ui) buttonActivated $ clearClick ui d (Just new_frame_id) new_play_click_id (Just new_clear_click_id)
 
-playClick :: UI -> IORef UIData -> Maybe (Double, Maybe (ConnectId DrawingArea)) -> ConnectId Button -> Maybe (ConnectId Button) -> IO ()
+playClick :: UI -> IORef UIData -> Maybe Double -> ConnectId Button -> Maybe (ConnectId Button) -> IO ()
 playClick ui d paused play_click_id clear_click_id = do
   K.set (uiPlayPause ui) [stackVisibleChild := castToWidget (uiPause ui)]
   case paused of
     Nothing -> return ()
-    Just (t0, draw_id) -> do
-      maybe (return ()) signalDisconnect draw_id
+    Just t0 -> do
       signalDisconnect play_click_id
       maybe (return ()) signalDisconnect clear_click_id
       void $ mfix $ \new_clear_click_id -> do
@@ -270,7 +269,8 @@ oscillograph = do
     updateFrequencyYStep ui
   void $ onValueChanged (uiDelay ui) $ updateDelayStep ui
   d <- newIORef $ UIData emptyPlot --0.0
-  void $ mfix $ \sid -> on (uiPlay ui) buttonActivated $ playClick ui d (Just (0.0, Nothing)) sid Nothing
+  void $ on (uiCanvas ui) draw $ canvasDraw ui d
+  void $ mfix $ \sid -> on (uiPlay ui) buttonActivated $ playClick ui d (Just 0.0) sid Nothing
   void $ on (uiPause ui) buttonActivated $ pauseClick ui
   widgetShowAll (uiWindow ui)
   mainGUI
