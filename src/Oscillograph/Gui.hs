@@ -107,7 +107,6 @@ data UIData = UIData
   { _dPlot  :: !Plot
   , _dPaused :: !Bool
   , _dStartTime :: !Double
-  , _dPaused2 :: !Bool
   }
 makeLenses ''UIData
 
@@ -164,20 +163,20 @@ frame ui d = do
   paused <- (Just (castToWidget $ uiPlay ui) ==) <$> K.get (uiPlayPause ui) stackVisibleChild
   if paused
     then
-      modifyIORef' d $ set dPaused True . set dStartTime t . set dPaused2 True
+      modifyIORef' d $ set dPaused True . set dStartTime t
     else do
       void $ timeoutAdd (frame ui d >> return False) $ round (1000.0 / fps)
-      modifyIORef' d $ set dPaused2 False
+      modifyIORef' d $ set dPaused False
 
 clearClick :: UI -> IORef UIData -> IO ()
 clearClick ui d = do
-  paused <- view dPaused2 <$> readIORef d
+  paused <- view dPaused <$> readIORef d
   if paused
     then
-      modifyIORef' d $ set dPlot emptyPlot . set dPaused True . set dStartTime 0.0
+      modifyIORef' d $ set dPlot emptyPlot . set dStartTime 0.0
     else do
       t <- currentSeconds
-      modifyIORef' d $ set dPlot emptyPlot . set dPaused False . set dStartTime t
+      modifyIORef' d $ set dPlot emptyPlot . set dStartTime t
   widgetQueueDraw (uiCanvas ui)
 
 playClick :: UI -> IORef UIData -> IO ()
@@ -188,7 +187,6 @@ playClick ui d = do
     then return ()
     else do
       currentSeconds >>= \t -> modifyIORef' d (over dStartTime $ \t0 -> t - t0)
-      modifyIORef' d $ set dPaused False
       frame ui d
 
 pauseClick :: UI -> IO ()
@@ -255,7 +253,7 @@ oscillograph = do
     updateMaxDelay ui
     updateFrequencyYStep ui
   void $ onValueChanged (uiDelay ui) $ updateDelayStep ui
-  d <- newIORef $ UIData emptyPlot True 0.0 True
+  d <- newIORef $ UIData emptyPlot True 0.0
   void $ on (uiCanvas ui) draw $ canvasDraw ui d
   void $ on (uiPlay ui) buttonActivated $ playClick ui d
   void $ on (uiPause ui) buttonActivated $ pauseClick ui
