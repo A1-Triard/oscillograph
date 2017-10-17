@@ -160,13 +160,10 @@ frame ui d = do
     $  iterate (addPoint dt $ calcPoint params)
     $  plot { maxPointsCount = round (plotDelay params / dt) }
   widgetQueueDraw (uiCanvas ui)
-  paused <- (Just (castToWidget $ uiPlay ui) ==) <$> K.get (uiPlayPause ui) stackVisibleChild
-  if paused
-    then
-      modifyIORef' d $ set dPaused True . set dStartTime t
-    else do
-      void $ timeoutAdd (frame ui d >> return False) $ round (1000.0 / fps)
-      modifyIORef' d $ set dPaused False
+  pause_requested <- (Just (castToWidget $ uiPlay ui) ==) <$> K.get (uiPlayPause ui) stackVisibleChild
+  if pause_requested
+    then modifyIORef' d $ set dPaused True . set dStartTime t
+    else void $ timeoutAdd (frame ui d >> return False) $ round (1000.0 / fps)
 
 clearClick :: UI -> IORef UIData -> IO ()
 clearClick ui d = do
@@ -182,7 +179,7 @@ playClick ui d = do
   if not paused
     then return ()
     else do
-      currentSeconds >>= \t -> modifyIORef' d (over dStartTime $ \t0 -> t - t0)
+      currentSeconds >>= \t -> modifyIORef' d $ set dPaused False . (over dStartTime $ \t0 -> t - t0)
       frame ui d
 
 pauseClick :: UI -> IO ()
