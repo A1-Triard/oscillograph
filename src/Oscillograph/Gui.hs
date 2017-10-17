@@ -24,11 +24,11 @@ import Paths_oscillograph_core
 fps :: Double
 fps = 50.0
 
-dtK :: Double
-dtK = 0.02
+stepsPerCycle :: Double
+stepsPerCycle = 50.0
 
-delayK :: Double
-delayK = 10.0
+maxDelayInCycles :: Double
+maxDelayInCycles = 10.0
 
 data Plot = Plot
   { _plotTime :: !Double
@@ -152,7 +152,7 @@ timer d = do
 frame :: UI -> IORef UIData -> IO ()
 frame ui d = do
   params <- plotParams ui
-  let dt = dtK / max (frequencyX params) (frequencyY params)
+  let dt = 1.0 / (stepsPerCycle * max (frequencyX params) (frequencyY params))
   t <- timer d
   modifyIORef' d $ over dPlot
     $ takeLast ((<= t) . view plotTime)
@@ -192,17 +192,17 @@ currentSeconds = do
 
 updateMaxDelay :: UI -> IO ()
 updateMaxDelay ui = do
-  w_x <- K.get (uiFrequencyX ui) adjustmentValue
-  w_y <- K.get (uiFrequencyY ui) adjustmentValue
+  frequency_x <- K.get (uiFrequencyX ui) adjustmentValue
+  frequency_y <- K.get (uiFrequencyY ui) adjustmentValue
   delay <- K.get (uiDelay ui) adjustmentValue
   min_delay <- K.get (uiDelay ui) adjustmentLower
-  let max_delay = delayK / max w_x w_y
+  let max_delay = maxDelayInCycles / max frequency_x frequency_y
   K.set (uiDelay ui) [adjustmentUpper := max_delay, adjustmentLower := min min_delay max_delay, adjustmentValue := min delay max_delay]
 
 updateMaxFrequency :: UI -> IO ()
 updateMaxFrequency ui = do
   min_delay <- K.get (uiDelay ui) adjustmentLower
-  let max_frequency = delayK / min_delay
+  let max_frequency = maxDelayInCycles / min_delay
   frequency_x <- K.get (uiFrequencyX ui) adjustmentValue
   frequency_y <- K.get (uiFrequencyY ui) adjustmentValue
   min_frequency_x <- K.get (uiFrequencyX ui) adjustmentLower
