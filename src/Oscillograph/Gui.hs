@@ -30,30 +30,43 @@ dtK = 0.02
 delayK :: Double
 delayK = 10.0
 
-data Plot = Plot !Double !Int ![(Double, Double)]
+data Plot = Plot
+  { plotTime :: !Double
+  , maxPointsCount :: !Int
+  , pointsCount :: !Int
+  , plotPoints :: ![(Double, Double)]
+  }
 
 emptyPlot :: Plot
-emptyPlot = Plot 0.0 0 []
+emptyPlot = Plot 0.0 0 0 []
 
-addPoint :: Int -> Double -> (Double -> (Double, Double)) -> Plot -> Plot
-addPoint max_points_count dt point (Plot time points_count points) =
-  let increased_points_count = points_count + 1 in
-  let drop_count = max 0 (increased_points_count - max_points_count) in
-  let new_time = time + dt in
-  Plot new_time (increased_points_count - drop_count) $ drop drop_count $ points `snoc` point new_time
+addPoint :: Double -> (Double -> (Double, Double)) -> Plot -> Plot
+addPoint dt point plot =
+  let tail_points = max 0 (pointsCount plot + 1 - maxPointsCount plot) in
+  let t = plotTime plot + dt in
+  plot
+    { plotTime = t
+    , pointsCount = pointsCount plot + 1 - tail_points
+    , plotPoints = drop tail_points $ plotPoints plot `snoc` point t
+    }
 
-drawPlot :: Int -> DrawingArea -> Plot -> Render ()
-drawPlot max_points_count canvas (Plot _ points_count points) = do
+drawPlot :: DrawingArea -> Plot -> Render ()
+drawPlot canvas plot = do
   Rectangle _ _ w h <- liftIO $ widgetGetAllocation canvas
   let x0 = fromIntegral w / 2.0
   let y0 = fromIntegral h / 2.0
   let amplitude = fromIntegral (min w h) / 2.0
   setLineWidth 1.0
-  forM_ (zip (iterate (+ 1) (max_points_count `quot` 2 - points_count)) (zip points (drop 1 points))) $ \(n, ((x1, y1), (x2, y2))) -> do
-    setSourceRGBA 0.3 0.6 0.6 $ if n >= 0 then 1.0 else 1.0 + 2.0 * fromIntegral n / fromIntegral max_points_count
-    moveTo (x0 + amplitude * x1) (y0 - amplitude * y1)
-    lineTo (x0 + amplitude * x2) (y0 - amplitude * y2)
-    stroke
+  forM_
+    ( zip3
+        (iterate (+ 1) $ maxPointsCount plot `quot` 2 - pointsCount plot)
+        (plotPoints plot)
+        (drop 1 $ plotPoints plot)
+    ) $ \(n, (x1, y1), (x2, y2)) -> do
+      setSourceRGBA 0.3 0.6 0.6 $ if n >= 0 then 1.0 else 1.0 + 2.0 * fromIntegral n / fromIntegral (maxPointsCount plot)
+      moveTo (x0 + amplitude * x1) (y0 - amplitude * y1)
+      lineTo (x0 + amplitude * x2) (y0 - amplitude * y2)
+      stroke
 
 data UI = UI
   { uiWindow :: !Window
@@ -123,28 +136,32 @@ calcPoint params t =
   , amplitudeY params * cos (2.0 * pi * (frequencyY params * t + phaseY params))
   )
 
+takeLast :: (a -> Bool) -> [a] -> a
+takeLast cond = snd . fromMaybe (error "takeLast") . unsnoc . takeWhile cond
+
 frame :: IO Double -> UI -> IORef UIData -> Maybe (ConnectId DrawingArea) -> ConnectId Button -> Maybe (ConnectId Button) -> IO Bool
 frame timer ui d draw_id play_click_id clear_click_id = do
-  t1 <- timer
-  params <- plotParams ui
-  let dt = dtK / max (frequencyX params) (frequencyY params)
-  let max_points_count = round (plotDelay params / dt)
-  modifyIORef' d $ over dPlot $ \plot -> snd $ fromMaybe (error "frame") $ unsnoc $ takeWhile (\(Plot t _ _) -> t <= t1) $ iterate (addPoint max_points_count dt $ \t -> calcPoint params t) plot
   maybe (return ()) signalDisconnect draw_id
   maybe (return ()) signalDisconnect clear_click_id
-  void $ queueFrame max_points_count timer ui d play_click_id
+  void $ queueFrame timer ui d play_click_id
   return False
 
-queueFrame :: Int -> IO Double -> UI -> IORef UIData -> ConnectId Button -> IO (ConnectId Button)
-queueFrame max_points_count timer ui d play_click_id = do
+queueFrame :: IO Double -> UI -> IORef UIData -> ConnectId Button -> IO (ConnectId Button)
+queueFrame timer ui d play_click_id = do
+  params <- plotParams ui
+  let dt = dtK / max (frequencyX params) (frequencyY params)
+  t <- timer
+  modifyIORef' d $ over dPlot $ \plot
+    -> takeLast ((<= t) . plotTime)
+    $  iterate (addPoint dt $ calcPoint params)
+    $  plot { maxPointsCount = round (plotDelay params / dt) }
   plot <- view dPlot <$> readIORef d
-  draw_id <- on (uiCanvas ui) draw $ drawPlot max_points_count (uiCanvas ui) plot
+  draw_id <- on (uiCanvas ui) draw $ drawPlot (uiCanvas ui) plot
   widgetQueueDraw (uiCanvas ui)
   paused <- (Just (castToWidget $ uiPlay ui) ==) <$> K.get (uiPlayPause ui) stackVisibleChild
   if paused
     then do
       signalDisconnect play_click_id
-      t <- timer
       mfix $ \new_clear_click_id -> do
         new_play_click_id <- mfix $ \sid -> on (uiPlay ui) buttonActivated $ playClick ui d (Just (t, Just draw_id)) sid (Just new_clear_click_id)
         on (uiClear ui) buttonActivated $ clearClick ui d Nothing (Just draw_id) new_play_click_id (Just new_clear_click_id)
@@ -183,15 +200,10 @@ playClick ui d paused play_click_id clear_click_id = do
       maybe (return ()) signalDisconnect draw_id
       signalDisconnect play_click_id
       maybe (return ()) signalDisconnect clear_click_id
-      w_x <- K.get (uiFrequencyX ui) adjustmentValue
-      w_y <- K.get (uiFrequencyY ui) adjustmentValue
-      delay <- K.get (uiDelay ui) adjustmentValue
-      let dt = dtK / max w_x w_y
-      let max_points_count = round (delay / dt)
       void $ mfix $ \new_clear_click_id -> do
         new_play_click_id <- mfix $ \sid -> on (uiPlay ui) buttonActivated $ playClick ui d Nothing sid (Just new_clear_click_id)
         current_seconds <- currentSeconds
-        queueFrame max_points_count (((+ t0) . subtract current_seconds) <$> currentSeconds) ui d new_play_click_id
+        queueFrame (((+ t0) . subtract current_seconds) <$> currentSeconds) ui d new_play_click_id
 
 pauseClick :: UI -> IO ()
 pauseClick ui = do
