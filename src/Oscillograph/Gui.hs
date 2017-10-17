@@ -171,12 +171,8 @@ frame ui d = do
 clearClick :: UI -> IORef UIData -> IO ()
 clearClick ui d = do
   paused <- view dPaused <$> readIORef d
-  if paused
-    then
-      modifyIORef' d $ set dPlot emptyPlot . set dStartTime 0.0
-    else do
-      t <- currentSeconds
-      modifyIORef' d $ set dPlot emptyPlot . set dStartTime t
+  t <- if paused then return 0.0 else currentSeconds
+  modifyIORef' d $ set dPlot emptyPlot . set dStartTime t
   widgetQueueDraw (uiCanvas ui)
 
 playClick :: UI -> IORef UIData -> IO ()
