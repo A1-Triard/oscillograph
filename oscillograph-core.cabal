@@ -19,8 +19,10 @@ library
   exposed-modules: Oscillograph.Gui
   other-modules: Paths_oscillograph_core
   build-depends: base >= 4.7 && < 5
+               , app-settings
                , cairo
                , clock
+               , containers
                , gtk3
                , lens
                , text
@@ -120,8 +122,10 @@ test-suite oscillograph-core-test
   build-depends: base
                , HUnit
                , oscillograph-core
+               , app-settings
                , cairo
                , clock
+               , containers
                , gtk3
                , lens
                , text

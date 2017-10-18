@@ -21,14 +21,58 @@ module Oscillograph.Gui
 #include <haskell>
 import Paths_oscillograph_core
 
-fps :: Double
-fps = 50.0
+fps :: A.Setting Double
+fps = A.Setting "fps" 50.0
 
-stepsPerCycle :: Double
-stepsPerCycle = 50.0
+stepsPerCycle :: A.Setting Double
+stepsPerCycle = A.Setting "steps_per_cycle" 50.0
 
-maxDelayInCycles :: Double
-maxDelayInCycles = 10.0
+maxDelayInCycles :: A.Setting Double
+maxDelayInCycles = A.Setting "max_delay_in_cycles" 10.0
+
+defaultConfig :: A.DefaultConfig
+defaultConfig = A.getDefaultConfig $ do
+  A.setting fps
+  A.setting stepsPerCycle
+  A.setting maxDelayInCycles
+
+defaultGetSetting :: A.GetSetting
+defaultGetSetting = A.GetSetting $ \s ->
+  case s of
+    A.Setting _ default_value -> default_value
+    A.ListSetting _ default_value -> default_value
+
+configFile :: IO FilePath
+configFile = do
+  maybe_config_dir <- fromMaybe "" <$> lookupEnv "XDG_CONFIG_HOME"
+  config_dir <- if null maybe_config_dir then (++ "/.config") <$> getEnv "HOME" else return maybe_config_dir
+  return $ config_dir ++ "/" ++ "dd_oscillograph.conf"
+
+handleAll :: IO a -> IO ()
+handleAll = handle (\x -> let _ = x :: SomeException in return ()) . void
+
+handleIOError :: a -> IO a -> IO a
+handleIOError fallback =
+  handle (\x -> let e = x :: IOError in (handleAll $ hPutStrLn stderr $ ioeGetErrorString e) >> return fallback)
+
+handleReadConfigError :: a -> IO a -> IO a
+handleReadConfigError fallback
+  = handleIOError fallback
+  . handle (\x -> let e = x :: A.ParseException in (handleAll $ hPutStrLn stderr $ displayException e) >> return fallback)
+
+readAppSettings :: IO (A.Conf, A.GetSetting)
+readAppSettings = handleReadConfigError (M.empty, defaultGetSetting) $ A.readSettings =<< A.Path <$> configFile
+
+saveAppSettings :: A.Conf -> IO ()
+saveAppSettings c = do
+  config_file <- configFile
+  handleIOError () $ A.saveSettings defaultConfig (A.Path config_file) c
+
+appConfig :: IO A.GetSetting
+appConfig = do
+  (conf, get_setting) <- readAppSettings
+  saveAppSettings conf
+  return get_setting
 
 data Plot = Plot
   { _plotTime :: !Double
@@ -68,7 +112,8 @@ drawPlot canvas plot = do
       stroke
 
 data UI = UI
-  { uiWindow :: !Window
+  { uiConfig :: !A.GetSetting
+  , uiWindow :: !Window
   , uiCanvas :: !DrawingArea
   , uiPlayPause :: !Stack
   , uiPlay :: !Button
@@ -83,8 +128,11 @@ data UI = UI
   , uiDelay :: !Adjustment
   }
 
-buildUI :: String -> IO UI
-buildUI file = do
+uiSetting :: Read a => A.Setting a -> UI -> a
+uiSetting s ui = let A.GetSetting get_setting = uiConfig ui in get_setting s
+
+buildUI :: A.GetSetting -> String -> IO UI
+buildUI config file = do
   b <- builderNew
   builderAddFromFile b file
   window <- builderGetObject b castToWindow ("applicationWindow" :: S.Text)
@@ -100,7 +148,7 @@ buildUI file = do
   phase_y <- builderGetObject b castToAdjustment ("phaseY" :: S.Text)
   delay <- builderGetObject b castToAdjustment ("delay" :: S.Text)
   clear <- builderGetObject b castToButton ("clear" :: S.Text)
-  return $ UI window canvas play_pause play pause clear amplitude_x amplitude_y frequency_x frequency_y phase_x phase_y delay
+  return $ UI config window canvas play_pause play pause clear amplitude_x amplitude_y frequency_x frequency_y phase_x phase_y delay
 
 data UIData = UIData
   { _dPlot  :: !Plot
@@ -152,7 +200,7 @@ timer d = do
 frame :: UI -> IORef UIData -> IO ()
 frame ui d = do
   params <- plotParams ui
-  let dt = 1.0 / (stepsPerCycle * max (frequencyX params) (frequencyY params))
+  let dt = 1.0 / (uiSetting stepsPerCycle ui * max (frequencyX params) (frequencyY params))
   t <- timer d
   modifyIORef' d $ over dPlot
     $ takeLast ((<= t) . view plotTime)
@@ -162,7 +210,7 @@ frame ui d = do
   pause_requested <- (Just (castToWidget $ uiPlay ui) ==) <$> K.get (uiPlayPause ui) stackVisibleChild
   if pause_requested
     then modifyIORef' d $ set dPaused True . set dStartTime t
-    else void $ timeoutAdd (frame ui d >> return False) $ round (1000.0 / fps)
+    else void $ timeoutAdd (frame ui d >> return False) $ round (1000.0 / uiSetting fps ui)
 
 clearClick :: UI -> IORef UIData -> IO ()
 clearClick ui d = do
@@ -196,13 +244,13 @@ updateMaxDelay ui = do
   frequency_y <- K.get (uiFrequencyY ui) adjustmentValue
   delay <- K.get (uiDelay ui) adjustmentValue
   min_delay <- K.get (uiDelay ui) adjustmentLower
-  let max_delay = maxDelayInCycles / max frequency_x frequency_y
+  let max_delay = uiSetting maxDelayInCycles ui / max frequency_x frequency_y
   K.set (uiDelay ui) [adjustmentUpper := max_delay, adjustmentLower := min min_delay max_delay, adjustmentValue := min delay max_delay]
 
 updateMaxFrequency :: UI -> IO ()
 updateMaxFrequency ui = do
   min_delay <- K.get (uiDelay ui) adjustmentLower
-  let max_frequency = maxDelayInCycles / min_delay
+  let max_frequency = uiSetting maxDelayInCycles ui / min_delay
   frequency_x <- K.get (uiFrequencyX ui) adjustmentValue
   frequency_y <- K.get (uiFrequencyY ui) adjustmentValue
   min_frequency_x <- K.get (uiFrequencyX ui) adjustmentLower
@@ -230,8 +278,9 @@ updateFrequencyYStep ui = do
 
 oscillograph :: IO ()
 oscillograph = do
+  config <- appConfig
   void initGUI
-  ui <- buildUI =<< getDataFileName "ui.glade"
+  ui <- buildUI config =<< getDataFileName "ui.glade"
   void $ on (uiWindow ui) deleteEvent $ tryEvent $ lift mainQuit
   updateMaxFrequency ui
   updateMaxDelay ui
