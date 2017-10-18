@@ -475,6 +475,7 @@
             <property name="shadow_type">none</property>
             <child>
               <object class="GtkDrawingArea" id="drawingArea">
+                <property name="width_request">180</property>
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
                 <property name="margin_left">12</property>
@@ -486,7 +487,7 @@
           </object>
           <packing>
             <property name="resize">True</property>
-            <property name="shrink">True</property>
+            <property name="shrink">False</property>
           </packing>
         </child>
       </object>
