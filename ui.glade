@@ -395,7 +395,7 @@
                       <object class="GtkBox">
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
-                        <property name="spacing">6</property>
+                        <property name="spacing">12</property>
                         <property name="homogeneous">True</property>
                         <child>
                           <object class="GtkButton" id="clear">
@@ -403,7 +403,6 @@
                             <property name="visible">True</property>
                             <property name="can_focus">True</property>
                             <property name="receives_default">True</property>
-                            <property name="margin_right">6</property>
                             <property name="use_stock">True</property>
                           </object>
                           <packing>
