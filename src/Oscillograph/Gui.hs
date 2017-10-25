@@ -301,4 +301,3 @@ oscillograph = do
   void $ on (uiClear ui) buttonActivated $ clearClick ui d
   widgetShowAll (uiWindow ui)
   mainGUI
-  return ()
