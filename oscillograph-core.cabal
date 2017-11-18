@@ -5,10 +5,10 @@ description: A simple toy app.
 homepage: https://github.com/A1-Triard/oscillograph#readme
 license: Apache
 license-file: LICENSE
-author: Warlock
-maintainer: internalmike@gmail.com
-copyright: 2017 Warlock
-category: Web
+author: Warlock <internalmike@gmail.com>
+maintainer: Warlock <internalmike@gmail.com>
+copyright: 2017 Warlock <internalmike@gmail.com>
+category: GUI
 build-type: Simple
 -- extra-source-files:
 cabal-version: >=1.10
@@ -71,7 +71,6 @@ library
 executable oscillograph
   hs-source-dirs: app
   main-is: Main.hs
-  ghc-options: -threaded -rtsopts -with-rtsopts=-N
   build-depends: base
                , oscillograph-core
   default-extensions: BangPatterns
@@ -130,7 +129,6 @@ test-suite oscillograph-core-test
                , lens
                , text
                , transformers
-  ghc-options: -threaded -rtsopts -with-rtsopts=-N
   default-extensions: BangPatterns
                     , CPP
                     , DataKinds
