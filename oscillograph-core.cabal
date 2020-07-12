@@ -3,8 +3,6 @@ version: 0.1
 synopsis: A simple toy app.
 description: A simple toy app.
 homepage: https://github.com/A1-Triard/oscillograph#readme
-license: Apache
-license-file: LICENSE
 author: Warlock <internalmike@gmail.com>
 maintainer: Warlock <internalmike@gmail.com>
 copyright: 2017 Warlock <internalmike@gmail.com>
